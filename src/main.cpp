@@ -24,13 +24,15 @@ String ReciveDataSerial = "", Gravidade ="";
 #define MotorInterfaceType 1
 #define MotorLigar LOW
 #define MotorDesligar HIGH
+int convert = 0;
 
 // Create a new instance of the AccelStepper class:
 AccelStepper stepper = AccelStepper(MotorInterfaceType, MotorStepPin, MotorDirPin);
 
 // Função que transforma de RPM para Passos por Segundo
-float RPM_to_PPS(float RPM){
-  return RPM*20/3;
+int RPM_to_PPS(int RPM){
+  int result = RPM*20/3;
+  return result;
 }
 
 //Cria a serial por sofware para conexao com modulo RS485
@@ -43,7 +45,6 @@ void setup() {
   pinMode(MotorEnable, OUTPUT);
   digitalWrite(MotorEnable, MotorDesligar); 
   stepper.setMaxSpeed(RPM_to_PPS(150)); // Velocidade Máxima imposta será de 150 RPM
-
   pinMode(SSerialTxControl, OUTPUT);
 
   //Coloca o modulo RS485 em modo de recepcao
@@ -59,7 +60,6 @@ void loop() {
     while (RS485Serial.available())
     {
       char inChar = (char)RS485Serial.read();
-      
       if (inChar != '\0') 
       {
         ReciveDataSerial += inChar;
@@ -67,47 +67,43 @@ void loop() {
       
       if (inChar == '\n')
       {
-        //Mostra no Serial Monitor a string recebida
-        Serial.print(ReciveDataSerial);
         
         String nova_str = ReciveDataSerial.substring(0, ReciveDataSerial.length() - 2);
         String estadoLigar, whereIsSend;
-        Gravidade = "";
-        int pos = nova_str.indexOf(",");
+
+        int firstComma = nova_str.indexOf(',');
+        int secondComma = nova_str.indexOf(',', firstComma + 1);
 
         // Se tiver virgula separa os dados pela posição
-        whereIsSend = nova_str.substring(0, pos); 
-        estadoLigar = nova_str.substring(pos + 1); 
-
-        // Se tiver virgula separa os dados pela posição
-        if (pos != 1) {
-          Gravidade = nova_str.substring(pos + 2); 
+        whereIsSend = nova_str.substring(0, firstComma); 
+        
+        // Se não tiver virgula é porque é um dado sozinho, como o "off" para desligar o led
+        if (secondComma != -1) {
+          Gravidade = nova_str.substring(secondComma+1); 
+          estadoLigar = nova_str.substring(firstComma+1,secondComma); 
         }
+        else estadoLigar = nova_str.substring(firstComma+1); 
 
         // Se não tiver virgula é porque é um dado sozinho, como o "off" para desligar o led
         if (whereIsSend == "ESP-Master"){
           if (estadoLigar == "off"){
+            Gravidade = "";
             digitalWrite(MotorEnable, MotorDesligar);  // Desligar o motor
           }
           if (estadoLigar == "on"){
             digitalWrite(MotorEnable, MotorLigar);  // Liga o motor
           } 
+          Serial.println(whereIsSend);
+          Serial.println(estadoLigar);
+          
         }
         
         ReciveDataSerial = "";
       }
     }
   }
-
   if (Gravidade != ""){
-    stepper.setSpeed(RPM_to_PPS(atoi(Gravidade.c_str()))); // Coloca a velocidade imposta pelo usuário
+    stepper.setSpeed(atoi(Gravidade.c_str())); // Coloca a velocidade imposta pelo usuário
     stepper.runSpeed(); // Inicia o funcionamento
   } 
-
-  
-  static unsigned long lastSerialTime = 0;
-  unsigned long currentMillis = millis();
-  if (currentMillis - lastSerialTime >= 900) { // Intervalo de 1000ms
-    lastSerialTime = currentMillis;
-  }
 }
